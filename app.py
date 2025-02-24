@@ -5,89 +5,72 @@ import os
 from langchain.prompts import PromptTemplate
 from langchain.chains.llm import LLMChain
 from prompt import *  
-from utils import  *
+from utils import *
 
-
-# Load environment variables from the .env file
+# Load environment variables
 load_dotenv()
-
-# Access the environment variables just like you would with os.environ
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Response Format For Language Translation
+# Translation Function
 def Translation_chain(input_text, languages):
-    # Define the LLM
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-8b", temperature=1, api_key=GOOGLE_API_KEY)  
-    
-    # Define the prompt
-    PROMPT_TEMPLATE = PROMPT  # Imported from prompt.py, should contain a translation prompt
-    prompt = PromptTemplate(
-            input_variables=["text", "languages"],  
-            template=PROMPT_TEMPLATE,
-        )
-      
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-8b", temperature=1, api_key=GOOGLE_API_KEY)
+    prompt = PromptTemplate(input_variables=["text", "languages"], template=PROMPT)
     llm_chain = LLMChain(llm=llm, prompt=prompt)
+    return llm_chain.run({"text": input_text, "languages": languages})
 
-    # Generate response
-    response = llm_chain.run({"text": input_text, "languages": languages})
-    return response
+# Streamlit UI
+st.set_page_config(page_title="Language Translator", page_icon="🌍", layout="wide")
+st.title("🌍 AI-Powered Language Translator")
 
-# Consolidated input handling function
-def get_input_data():
+# Input Tabs
+st.markdown("### 📥 Input Methods")
+tabs = st.tabs(["📄 Upload PDF", "🔗 Enter URL", "✍️ Type Text"])
 
+with tabs[0]:  # PDF Upload
     uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
+
+with tabs[1]:  # URL Input
     url = st.text_input("Enter a URL")
-    text = st.text_area("Enter your text", height=200)
 
-    # Handle PDF input
-    if uploaded_file:
-        extracted_text = extract_text_from_pdf(uploaded_file)
-        input_type = "PDF"
-    # Handle URL input
-    elif url:
-        extracted_text = extract_text_from_url(url)
-        input_type = "URL"
-    # Handle direct text input
-    elif text:
-        extracted_text = text
-        input_type = "Text"
+with tabs[2]:  # Text Input
+    text = st.text_area("Enter your text", height=150)
+
+# Determine Input Type
+extracted_text = None
+input_type = None
+
+if uploaded_file:
+    extracted_text = extract_text_from_pdf(uploaded_file)
+    input_type = "PDF"
+elif url:
+    extracted_text = extract_text_from_url(url)
+    input_type = "URL"
+elif text:
+    extracted_text = text
+    input_type = "Text"
+
+# Show Extracted Text
+if extracted_text:
+    st.markdown(f"### 🔍 Extracted Text from {input_type}:")
+    st.text_area("Preview", extracted_text, height=200)
+
+# Language Selection
+languages = st.text_input("🌐 Enter the language pair (e.g., 'English to Spanish')", help="Specify the source and target language.")
+
+# Translate Button
+if st.button("🚀 Translate"):
+    if not extracted_text or not languages:
+        st.warning("⚠️ Please provide input text and specify languages.")
     else:
-        extracted_text = None
-        input_type = None
+        with st.spinner("Translating..."):
+            response = Translation_chain(input_text=extracted_text, languages=languages)
+            st.success("✅ Translation Complete!")
+            st.subheader("📝 Translated Text:")
+            st.write(response)
 
-    return extracted_text, input_type
-
-
-# Streamlit app
-st.set_page_config(page_title="Language Translator")
-st.header("Language Translator")
-
-# Get user input (file, URL, or direct text)
-user_input, input_type = get_input_data()
-
-# Display extracted or entered text
-if user_input:
-    st.text_area(f"Extracted Text from {input_type}", user_input, height=200)
-# Input language specification 
-languages = st.text_input("Enter the language pair (e.g., 'English to Spanish')")
-
-# Translate button
-if st.button("Translate"):
-    response = Translation_chain(input_text=user_input, languages=languages)
-    st.subheader("The Translation is:")
-    st.write(response)
-
-    # Download options
-    st.download_button(
-            label="Download as TXT",
-            data=convert_to_txt(response),
-            file_name="translated_text.txt",
-            mime="text/plain",
-        )
-    st.download_button(
-            label="Download as DOCX",
-            data=convert_to_docx(response),
-            file_name="translated_text.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
-
+            # Download Buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button("📥 Download as TXT", data=convert_to_txt(response), file_name="translated_text.txt", mime="text/plain")
+            with col2:
+                st.download_button("📥 Download as DOCX", data=convert_to_docx(response), file_name="translated_text.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
